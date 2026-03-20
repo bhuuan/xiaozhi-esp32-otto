@@ -1,76 +1,76 @@
-# MQTT + UDP 混合通信协议文档
+# MQTT + UDP Hybrid Communication Protocol
 
-基于代码实现整理的 MQTT + UDP 混合通信协议文档，概述设备端与服务器之间如何通过 MQTT 进行控制消息传输，通过 UDP 进行音频数据传输的交互方式。
-
----
-
-## 1. 协议概览
-
-本协议采用混合传输方式：
-- **MQTT**：用于控制消息、状态同步、JSON 数据交换
-- **UDP**：用于实时音频数据传输，支持加密
-
-### 1.1 协议特点
-
-- **双通道设计**：控制与数据分离，确保实时性
-- **加密传输**：UDP 音频数据使用 AES-CTR 加密
-- **序列号保护**：防止数据包重放和乱序
-- **自动重连**：MQTT 连接断开时自动重连
+This document describes the MQTT + UDP hybrid protocol based on code analysis: how the device exchanges control messages over MQTT and audio data over UDP.
 
 ---
 
-## 2. 总体流程概览
+## 1. Protocol Overview
+
+This protocol uses a dual-transport design:
+- **MQTT**: control messages, state sync, JSON data exchange
+- **UDP**: real-time audio data transmission with encryption
+
+### 1.1 Key Characteristics
+
+- **Dual-channel design**: control and data channels are separated for real-time performance
+- **Encrypted transport**: UDP audio data is AES-CTR encrypted
+- **Sequence number protection**: prevents packet replay and reordering
+- **Auto-reconnect**: MQTT reconnects automatically on disconnect
+
+---
+
+## 2. Overall Flow
 
 ```mermaid
 sequenceDiagram
-    participant Device as ESP32 设备
-    participant MQTT as MQTT 服务器
-    participant UDP as UDP 服务器
+    participant Device as ESP32 Device
+    participant MQTT as MQTT Server
+    participant UDP as UDP Server
 
-    Note over Device, UDP: 1. 建立 MQTT 连接
+    Note over Device, UDP: 1. Establish MQTT connection
     Device->>MQTT: MQTT Connect
     MQTT->>Device: Connected
 
-    Note over Device, UDP: 2. 请求音频通道
+    Note over Device, UDP: 2. Request audio channel
     Device->>MQTT: Hello Message (type: "hello", transport: "udp")
-    MQTT->>Device: Hello Response (UDP 连接信息 + 加密密钥)
+    MQTT->>Device: Hello Response (UDP connection info + encryption key)
 
-    Note over Device, UDP: 3. 建立 UDP 连接
+    Note over Device, UDP: 3. Establish UDP connection
     Device->>UDP: UDP Connect
     UDP->>Device: Connected
 
-    Note over Device, UDP: 4. 音频数据传输
-    loop 音频流传输
-        Device->>UDP: 加密音频数据 (Opus)
-        UDP->>Device: 加密音频数据 (Opus)
+    Note over Device, UDP: 4. Audio data transfer
+    loop Audio streaming
+        Device->>UDP: Encrypted audio data (Opus)
+        UDP->>Device: Encrypted audio data (Opus)
     end
 
-    Note over Device, UDP: 5. 控制消息交换
-    par 控制消息
-        Device->>MQTT: Listen/TTS/MCP 消息
-        MQTT->>Device: STT/TTS/MCP 响应
+    Note over Device, UDP: 5. Control message exchange
+    par Control messages
+        Device->>MQTT: Listen/TTS/MCP messages
+        MQTT->>Device: STT/TTS/MCP responses
     end
 
-    Note over Device, UDP: 6. 关闭连接
+    Note over Device, UDP: 6. Close connection
     Device->>MQTT: Goodbye Message
     Device->>UDP: Disconnect
 ```
 
 ---
 
-## 3. MQTT 控制通道
+## 3. MQTT Control Channel
 
-### 3.1 连接建立
+### 3.1 Connection Setup
 
-设备通过 MQTT 连接到服务器，连接参数包括：
-- **Endpoint**：MQTT 服务器地址和端口
-- **Client ID**：设备唯一标识符
-- **Username/Password**：认证凭据
-- **Keep Alive**：心跳间隔（默认240秒）
+Device connects to MQTT server with:
+- **Endpoint**: MQTT server address and port
+- **Client ID**: device unique identifier
+- **Username/Password**: authentication credentials
+- **Keep Alive**: heartbeat interval (default 240 seconds)
 
-### 3.2 Hello 消息交换
+### 3.2 Hello Message Exchange
 
-#### 3.2.1 设备端发送 Hello
+#### 3.2.1 Device sends Hello
 
 ```json
 {
@@ -89,7 +89,7 @@ sequenceDiagram
 }
 ```
 
-#### 3.2.2 服务器响应 Hello
+#### 3.2.2 Server responds Hello
 
 ```json
 {
@@ -111,17 +111,17 @@ sequenceDiagram
 }
 ```
 
-**字段说明：**
-- `udp.server`：UDP 服务器地址
-- `udp.port`：UDP 服务器端口
-- `udp.key`：AES 加密密钥（十六进制字符串）
-- `udp.nonce`：AES 加密随机数（十六进制字符串）
+**Field descriptions:**
+- `udp.server`: UDP server address
+- `udp.port`: UDP server port
+- `udp.key`: AES encryption key (hex string)
+- `udp.nonce`: AES nonce (hex string)
 
-### 3.3 JSON 消息类型
+### 3.3 JSON Message Types
 
-#### 3.3.1 设备端→服务器
+#### 3.3.1 Device → Server
 
-1. **Listen 消息**
+1. **Listen**
    ```json
    {
      "session_id": "xxx",
@@ -131,7 +131,7 @@ sequenceDiagram
    }
    ```
 
-2. **Abort 消息**
+2. **Abort**
    ```json
    {
      "session_id": "xxx",
@@ -140,7 +140,7 @@ sequenceDiagram
    }
    ```
 
-3. **MCP 消息**
+3. **MCP**
    ```json
    {
      "session_id": "xxx",
@@ -153,7 +153,7 @@ sequenceDiagram
    }
    ```
 
-4. **Goodbye 消息**
+4. **Goodbye**
    ```json
    {
      "session_id": "xxx",
@@ -161,71 +161,71 @@ sequenceDiagram
    }
    ```
 
-#### 3.3.2 服务器→设备端
+#### 3.3.2 Server → Device
 
-支持的消息类型与 WebSocket 协议一致，包括：
-- **STT**：语音识别结果
-- **TTS**：语音合成控制
-- **LLM**：情感表达控制
-- **MCP**：物联网控制
-- **System**：系统控制
-- **Custom**：自定义消息（可选）
+Supported message types match the WebSocket protocol:
+- **STT**: speech recognition result
+- **TTS**: speech synthesis control
+- **LLM**: emotion expression control
+- **MCP**: IoT control
+- **System**: system control
+- **Custom**: custom messages (optional)
 
 ---
 
-## 4. UDP 音频通道
+## 4. UDP Audio Channel
 
-### 4.1 连接建立
+### 4.1 Connection Setup
 
-设备收到 MQTT Hello 响应后，使用其中的 UDP 连接信息建立音频通道：
-1. 解析 UDP 服务器地址和端口
-2. 解析加密密钥和随机数
-3. 初始化 AES-CTR 加密上下文
-4. 建立 UDP 连接
+After receiving the MQTT Hello response, device:
+1. Parses UDP server address and port
+2. Parses encryption key and nonce
+3. Initializes AES-CTR encryption context
+4. Establishes UDP connection
 
-### 4.2 音频数据格式
+### 4.2 Audio Data Format
 
-#### 4.2.1 加密音频包结构
+#### 4.2.1 Encrypted audio packet structure
 
 ```
 |type 1byte|flags 1byte|payload_len 2bytes|ssrc 4bytes|timestamp 4bytes|sequence 4bytes|
 |payload payload_len bytes|
 ```
 
-**字段说明：**
-- `type`：数据包类型，固定为 0x01
-- `flags`：标志位，当前未使用
-- `payload_len`：负载长度（网络字节序）
-- `ssrc`：同步源标识符
-- `timestamp`：时间戳（网络字节序）
-- `sequence`：序列号（网络字节序）
-- `payload`：加密的 Opus 音频数据
+**Fields:**
+- `type`: packet type, fixed `0x01`
+- `flags`: flag bits, currently unused
+- `payload_len`: payload length (network byte order)
+- `ssrc`: synchronization source identifier
+- `timestamp`: timestamp (network byte order)
+- `sequence`: sequence number (network byte order)
+- `payload`: encrypted Opus audio data
 
-#### 4.2.2 加密算法
+#### 4.2.2 Encryption
 
-使用 **AES-CTR** 模式加密：
-- **密钥**：128位，由服务器提供
-- **随机数**：128位，由服务器提供
-- **计数器**：包含时间戳和序列号信息
+Uses **AES-CTR** mode:
+- **Key**: 128-bit, provided by server
+- **Nonce**: 128-bit, provided by server
+- **Counter**: incorporates timestamp and sequence number
 
-### 4.3 序列号管理
+### 4.3 Sequence Number Management
 
-- **发送端**：`local_sequence_` 单调递增
-- **接收端**：`remote_sequence_` 验证连续性
-- **防重放**：拒绝序列号小于期望值的数据包
-- **容错处理**：允许轻微的序列号跳跃，记录警告
+- **Sender**: `local_sequence_` monotonically increases
+- **Receiver**: `remote_sequence_` verifies continuity
+- **Anti-replay**: rejects packets with sequence number below expected
+- **Fault tolerance**: allows minor sequence gaps; logs warnings
 
-### 4.4 错误处理
+### 4.4 Error Handling
 
-1. **解密失败**：记录错误，丢弃数据包
-2. **序列号异常**：记录警告，但仍处理数据包
-3. **数据包格式错误**：记录错误，丢弃数据包
+1. **Decryption failure**: log error, discard packet
+2. **Sequence number anomaly**: log warning, still process packet
+3. **Malformed packet**: log error, discard packet
 
 ---
 
-## 5. 状态管理
+## 5. State Management
 
-### 5.1 连接状态
+### 5.1 Connection States
 
 ```mermaid
 stateDiagram
@@ -245,9 +245,8 @@ stateDiagram
     MqttConnected --> Disconnected: MQTT Disconnect
 ```
 
-### 5.2 状态检查
+### 5.2 Channel Availability Check
 
-设备通过以下条件判断音频通道是否可用：
 ```cpp
 bool IsAudioChannelOpened() const {
     return udp_ != nullptr && !error_occurred_ && !IsTimeout();
@@ -256,138 +255,138 @@ bool IsAudioChannelOpened() const {
 
 ---
 
-## 6. 配置参数
+## 6. Configuration Parameters
 
-### 6.1 MQTT 配置
+### 6.1 MQTT Config
 
-从设置中读取的配置项：
-- `endpoint`：MQTT 服务器地址
-- `client_id`：客户端标识符
-- `username`：用户名
-- `password`：密码
-- `keepalive`：心跳间隔（默认240秒）
-- `publish_topic`：发布主题
+Read from settings:
+- `endpoint`: MQTT server address
+- `client_id`: client identifier
+- `username`: username
+- `password`: password
+- `keepalive`: heartbeat interval (default 240 s)
+- `publish_topic`: publish topic
 
-### 6.2 音频参数
+### 6.2 Audio Parameters
 
-- **格式**：Opus
-- **采样率**：16000 Hz（设备端）/ 24000 Hz（服务器端）
-- **声道数**：1（单声道）
-- **帧时长**：60ms
-
----
-
-## 7. 错误处理与重连
-
-### 7.1 MQTT 重连机制
-
-- 连接失败时自动重试
-- 支持错误上报控制
-- 断线时触发清理流程
-
-### 7.2 UDP 连接管理
-
-- 连接失败时不自动重试
-- 依赖 MQTT 通道重新协商
-- 支持连接状态查询
-
-### 7.3 超时处理
-
-基类 `Protocol` 提供超时检测：
-- 默认超时时间：120 秒
-- 基于最后接收时间计算
-- 超时时自动标记为不可用
+- **Format**: Opus
+- **Sample rate**: 16000 Hz (device) / 24000 Hz (server)
+- **Channels**: 1 (mono)
+- **Frame duration**: 60 ms
 
 ---
 
-## 8. 安全考虑
+## 7. Error Handling and Reconnection
 
-### 8.1 传输加密
+### 7.1 MQTT Reconnect
 
-- **MQTT**：支持 TLS/SSL 加密（端口8883）
-- **UDP**：使用 AES-CTR 加密音频数据
+- Auto-retry on connection failure
+- Error reporting control supported
+- Cleanup triggered on disconnect
 
-### 8.2 认证机制
+### 7.2 UDP Connection Management
 
-- **MQTT**：用户名/密码认证
-- **UDP**：通过 MQTT 通道分发密钥
+- No auto-retry on failure
+- Relies on MQTT channel to renegotiate
+- Connection state queryable
 
-### 8.3 防重放攻击
+### 7.3 Timeout Handling
 
-- 序列号单调递增
-- 拒绝过期数据包
-- 时间戳验证
+Base class `Protocol` provides timeout detection:
+- Default timeout: 120 seconds
+- Calculated from last-received time
+- Marked unavailable on timeout
 
 ---
 
-## 9. 性能优化
+## 8. Security
 
-### 9.1 并发控制
+### 8.1 Transport Encryption
 
-使用互斥锁保护 UDP 连接：
+- **MQTT**: TLS/SSL (port 8883)
+- **UDP**: AES-CTR encrypts audio data
+
+### 8.2 Authentication
+
+- **MQTT**: username/password authentication
+- **UDP**: keys distributed via MQTT channel
+
+### 8.3 Anti-Replay
+
+- Monotonically increasing sequence numbers
+- Rejects stale packets
+- Timestamp verification
+
+---
+
+## 9. Performance
+
+### 9.1 Concurrency Control
+
+Mutex protects UDP connection:
 ```cpp
 std::lock_guard<std::mutex> lock(channel_mutex_);
 ```
 
-### 9.2 内存管理
+### 9.2 Memory Management
 
-- 动态创建/销毁网络对象
-- 智能指针管理音频数据包
-- 及时释放加密上下文
+- Network objects dynamically created/destroyed
+- Smart pointers manage audio packets
+- Encryption contexts released promptly
 
-### 9.3 网络优化
+### 9.3 Network Optimization
 
-- UDP 连接复用
-- 数据包大小优化
-- 序列号连续性检查
-
----
-
-## 10. 与 WebSocket 协议的比较
-
-| 特性 | MQTT + UDP | WebSocket |
-|------|------------|-----------|
-| 控制通道 | MQTT | WebSocket |
-| 音频通道 | UDP (加密) | WebSocket (二进制) |
-| 实时性 | 高 (UDP) | 中等 |
-| 可靠性 | 中等 | 高 |
-| 复杂度 | 高 | 低 |
-| 加密 | AES-CTR | TLS |
-| 防火墙友好度 | 低 | 高 |
+- UDP connection reuse
+- Packet size optimization
+- Sequence number continuity checks
 
 ---
 
-## 11. 部署建议
+## 10. Comparison: MQTT+UDP vs WebSocket
 
-### 11.1 网络环境
-
-- 确保 UDP 端口可达
-- 配置防火墙规则
-- 考虑 NAT 穿透
-
-### 11.2 服务器配置
-
-- MQTT Broker 配置
-- UDP 服务器部署
-- 密钥管理系统
-
-### 11.3 监控指标
-
-- 连接成功率
-- 音频传输延迟
-- 数据包丢失率
-- 解密失败率
+| Feature | MQTT + UDP | WebSocket |
+|---------|------------|-----------|
+| Control channel | MQTT | WebSocket |
+| Audio channel | UDP (encrypted) | WebSocket (binary) |
+| Latency | Low (UDP) | Moderate |
+| Reliability | Moderate | High |
+| Complexity | High | Low |
+| Encryption | AES-CTR | TLS |
+| Firewall-friendly | Low | High |
 
 ---
 
-## 12. 总结
+## 11. Deployment Recommendations
 
-MQTT + UDP 混合协议通过以下设计实现高效的音视频通信：
+### 11.1 Network Environment
 
-- **分离式架构**：控制与数据通道分离，各司其职
-- **加密保护**：AES-CTR 确保音频数据安全传输
-- **序列化管理**：防止重放攻击和数据乱序
-- **自动恢复**：支持连接断开后的自动重连
-- **性能优化**：UDP 传输保证音频数据的实时性
+- Ensure UDP port is reachable
+- Configure firewall rules
+- Consider NAT traversal
 
-该协议适用于对实时性要求较高的语音交互场景，但需要在网络复杂度和传输性能之间做出权衡。 
+### 11.2 Server Configuration
+
+- MQTT Broker setup
+- UDP server deployment
+- Key management system
+
+### 11.3 Monitoring Metrics
+
+- Connection success rate
+- Audio transmission latency
+- Packet loss rate
+- Decryption failure rate
+
+---
+
+## 12. Summary
+
+The MQTT + UDP hybrid protocol achieves efficient voice communication through:
+
+- **Separated architecture**: control and data channels each optimized independently
+- **Encrypted protection**: AES-CTR ensures audio data security
+- **Sequence management**: prevents replay attacks and packet reordering
+- **Auto-recovery**: MQTT auto-reconnect after disconnect
+- **Performance optimization**: UDP ensures real-time audio delivery
+
+This protocol suits latency-sensitive voice interaction scenarios, but involves higher network complexity compared to WebSocket.
